@@ -9,26 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { KeywordData, SortableKeywordDataKeys, SortDirection } from "@/types";
 import { ArrowDownAZ, ArrowUpAZ, Loader2, SearchIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-const mockKeywordApiCall = (prompt: string): Promise<KeywordData[]> => {
-  console.log("Mock API call for prompt:", prompt);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const baseKeywords = [
-        { id: "1", keyword: "ai content marketing", volume: 15000, difficulty: 45, cpc: 2.5, competition: 0.6, relatedTerms: ["content automation", "ai writing tools"] },
-        { id: "2", keyword: "seo keyword strategy", volume: 12000, difficulty: 60, cpc: 3.1, competition: 0.8, relatedTerms: ["long-tail keywords", "topic clusters"] },
-        { id: "3", keyword: "social media analytics", volume: 8000, difficulty: 30, cpc: 1.8, competition: 0.4, relatedTerms: ["engagement tracking", "influencer marketing"] },
-        { id: "4", keyword: "email marketing automation", volume: 10000, difficulty: 50, cpc: 2.2, competition: 0.7, relatedTerms: ["drip campaigns", "lead nurturing"] },
-        { id: "5", keyword: "contentcraft ai features", volume: 500, difficulty: 10, cpc: 0.5, competition: 0.1, relatedTerms: ["ai copilot", "marketing platform"] },
-        { id: "6", keyword: "best marketing tools 2024", volume: 18000, difficulty: 70, cpc: 4.0, competition: 0.9, relatedTerms: ["crm software", "analytics platforms"] },
-        { id: "7", keyword: "how to increase website traffic", volume: 22000, difficulty: 65, cpc: 2.8, competition: 0.85, relatedTerms: ["organic search", "link building"] },
-      ];
-      // Simulate some variation based on prompt
-      const filtered = baseKeywords.filter(k => k.keyword.includes(prompt.toLowerCase().split(" ")[0] || "ai"));
-      resolve(filtered.length > 0 ? filtered : baseKeywords.slice(0, Math.max(1, Math.floor(Math.random() * baseKeywords.length)) ));
-    }, 1500);
-  });
-};
+import { handlePerformKeywordResearch } from "@/lib/actions";
+import type { KeywordResearchInput } from "@/ai/flows/keyword-research-flow";
 
 
 export default function KeywordResearchView() {
@@ -45,13 +27,15 @@ export default function KeywordResearchView() {
       return;
     }
     setIsLoading(true);
-    setKeywords([]);
+    setKeywords([]); // Clear previous results
     try {
-      const results = await mockKeywordApiCall(prompt);
+      const input: KeywordResearchInput = { prompt };
+      const results = await handlePerformKeywordResearch(input);
       setKeywords(results);
       toast({ title: "Keywords Fetched", description: `Found ${results.length} keywords related to your prompt.` });
     } catch (error) {
-      toast({ title: "Error", description: "Failed to fetch keywords. Please try again.", variant: "destructive" });
+      console.error("Keyword research error:", error);
+      toast({ title: "Error", description: (error as Error).message || "Failed to fetch keywords. Please try again.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -76,12 +60,19 @@ export default function KeywordResearchView() {
     }
     if (sortConfig !== null) {
       KWs.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) {
-          return sortConfig.direction === "asc" ? -1 : 1;
+        // Ensure values being compared are of the same type, especially for strings vs numbers
+        const valA = a[sortConfig.key];
+        const valB = b[sortConfig.key];
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          return sortConfig.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
-        if (a[sortConfig.key] > b[sortConfig.key]) {
-          return sortConfig.direction === "asc" ? 1 : -1;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+           return sortConfig.direction === "asc" ? valA - valB : valB - valA;
         }
+        // Fallback for mixed types or other types - might need more specific handling
+        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
       });
     }
@@ -104,6 +95,7 @@ export default function KeywordResearchView() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           className="flex-grow"
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
         />
         <Button onClick={handleSearch} disabled={isLoading} className="w-full sm:w-auto">
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SearchIcon className="mr-2 h-4 w-4" />}

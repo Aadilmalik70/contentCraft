@@ -3,6 +3,7 @@
 
 import { adaptContentForPlatform, type AdaptContentForPlatformInput, type AdaptContentForPlatformOutput } from "@/ai/flows/adapt-content-for-platform";
 import { generateContentDraft, type GenerateContentDraftInput, type GenerateContentDraftOutput } from "@/ai/flows/generate-content-draft";
+import { performKeywordResearch, type KeywordResearchInput, type KeywordResearchOutput } from "@/ai/flows/keyword-research-flow";
 
 export async function handleGenerateContentDraft(input: GenerateContentDraftInput): Promise<GenerateContentDraftOutput> {
   try {
@@ -23,5 +24,15 @@ export async function handleAdaptContentForPlatform(input: AdaptContentForPlatfo
   } catch (error) {
     console.error("Error adapting content for platform:", error);
     throw new Error("Failed to adapt content for platform.");
+  }
+}
+
+export async function handlePerformKeywordResearch(input: KeywordResearchInput): Promise<KeywordResearchOutput> {
+  try {
+    const result = await performKeywordResearch(input);
+    return result;
+  } catch (error) {
+    console.error("Error performing keyword research:", error);
+    throw new Error("Failed to perform keyword research.");
   }
 }
