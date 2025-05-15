@@ -27,7 +27,6 @@ const KeywordDataSchema = z.object({
   competition: z.number().describe("Competition level (0-1, where 1 is high). Derived from Keyword Planner's competition index."),
   relatedTerms: z.array(z.string()).describe("List of related keyword terms. Note: This will be empty as it's not directly provided per keyword in this manner by Keyword Planner."),
 });
-
 const KeywordResearchOutputSchema = z.array(KeywordDataSchema);
 export type KeywordResearchOutput = z.infer<typeof KeywordResearchOutputSchema>;
 
@@ -52,12 +51,24 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
     outputSchema: KeywordResearchOutputSchema,
   },
   async (input) => {
-    if (!process.env.GOOGLE_ADS_DEVELOPER_TOKEN ||
-        !process.env.GOOGLE_ADS_CLIENT_ID ||
-        !process.env.GOOGLE_ADS_CLIENT_SECRET ||
-        !process.env.GOOGLE_ADS_REFRESH_TOKEN ||
-        !process.env.GOOGLE_ADS_LINKED_CUSTOMER_ID) {
-      throw new Error("Google Ads API credentials are not fully configured in .env file.");
+    const requiredEnvVars = [
+      'GOOGLE_ADS_DEVELOPER_TOKEN',
+      'GOOGLE_ADS_CLIENT_ID',
+      'GOOGLE_ADS_CLIENT_SECRET',
+      'GOOGLE_ADS_REFRESH_TOKEN',
+      'GOOGLE_ADS_LINKED_CUSTOMER_ID',
+      // GOOGLE_ADS_LOGIN_CUSTOMER_ID is used but can be undefined if not using an MCC.
+      // The API client will handle errors if it's required but missing.
+    ];
+    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+
+    if (missingVars.length > 0) {
+      throw new Error(
+        `Google Ads API credentials are not fully configured in .env file. Missing or empty: ${missingVars.join(', ')}. ` +
+        `Please ensure all required variables (GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN, GOOGLE_ADS_LINKED_CUSTOMER_ID) are set. ` +
+        `If using a Manager Account (MCC), also ensure GOOGLE_ADS_LOGIN_CUSTOMER_ID is set. ` +
+        `Remember to restart your Next.js server and Genkit development process after updating the .env file.`
+      );
     }
 
     const client = new GoogleAdsApi({
@@ -81,9 +92,6 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
         keyword_seed: { keywords: input.seedKeywords },
         language: `languageConstants/${languageId}`,
         geo_target_constants: [`geoTargetConstants/${geoTargetConstantId}`],
-        // historical_metrics_options: { // This can refine results but might limit them too
-        //   include_average_cpc: true,
-        // },
         keyword_plan_network: enums.KeywordPlanNetwork.GOOGLE_SEARCH_AND_PARTNERS,
       });
 
@@ -100,46 +108,55 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
             competitionLevel = 0.75;
           }
 
-          // Ensure metrics values are numbers before performing arithmetic operations or toFixed
           const avgMonthlySearches = Number(metrics?.avg_monthly_searches) || 0;
           const cpcMicros = Number(metrics?.average_cpc_micros) || 0;
-          // const lowTopOfPageBidMicros = Number(metrics?.low_top_of_page_bid_micros) || 0;
-          // const highTopOfPageBidMicros = Number(metrics?.high_top_of_page_bid_micros) || 0;
-          // let cpc = 0;
-          // if (lowTopOfPageBidMicros > 0 && highTopOfPageBidMicros > 0) {
-          //   cpc = ((lowTopOfPageBidMicros + highTopOfPageBidMicros) / 2) / 1000000;
-          // } else if (cpcMicros > 0) {
-          //   cpc = cpcMicros / 1000000;
-          // }
           const cpc = cpcMicros > 0 ? cpcMicros / 1000000 : 0;
 
           keywords.push({
-            id: result.text || Math.random().toString(36).substring(7), // Google Ads API results might not have a persistent ID in this specific response
+            id: result.text || Math.random().toString(36).substring(7),
             keyword: result.text || "",
             volume: avgMonthlySearches,
-            difficulty: 0, // Google Keyword Planner doesn't provide SEO difficulty
+            difficulty: 0, 
             cpc: parseFloat(cpc.toFixed(2)),
             competition: competitionLevel,
-            relatedTerms: [], // Not directly provided per keyword
+            relatedTerms: [],
           });
         }
       }
-      return keywords.slice(0, 50); // Limit results for now
+      return keywords.slice(0, 50);
     } catch (err: any) {
-      console.error("Google Ads API Error:", JSON.stringify(err, null, 2));
+      console.error("Google Ads API Error in getGoogleKeywordIdeasTool:", JSON.stringify(err, null, 2));
       if (err.errors) {
          err.errors.forEach((error:any) => console.error(error.message));
       }
-      throw new Error(`Failed to fetch keyword ideas from Google Keyword Planner: ${err.message || 'Unknown error'}`);
+      // Construct a more informative error message
+      let errorMessage = "Failed to fetch keyword ideas from Google Keyword Planner.";
+      if (err.message) {
+        errorMessage += ` Message: ${err.message}`;
+      }
+      if (err.errors && err.errors[0] && err.errors[0].message) {
+         errorMessage += ` Details: ${err.errors[0].message}`;
+      }
+      // Check for common authentication/authorization errors by inspecting err.errors[0].error_code
+      if (err.errors && err.errors[0] && err.errors[0].error_code) {
+        const errorCode = err.errors[0].error_code;
+        if (errorCode.authentication_error) {
+            errorMessage += ` (Authentication Error: ${errorCode.authentication_error})`;
+        } else if (errorCode.authorization_error) {
+            errorMessage += ` (Authorization Error: ${errorCode.authorization_error})`;
+        }
+      }
+      throw new Error(errorMessage);
     }
   }
 );
 
 export async function performKeywordResearch(input: KeywordResearchInput): Promise<KeywordResearchOutput> {
-  // Split prompt into an array of keywords if it's a comma-separated string, otherwise use as a single seed.
   const seedKeywords = input.prompt.split(',').map(kw => kw.trim()).filter(kw => kw.length > 0);
   if (seedKeywords.length === 0) {
-    return []; // Or throw an error if seed keywords are mandatory
+    // Return empty or throw error if no valid seed keywords derived from prompt
+    console.warn("No valid seed keywords extracted from prompt:", input.prompt);
+    return []; 
   }
   return keywordResearchFlow({ seedKeywordsList: seedKeywords });
 }
@@ -158,11 +175,8 @@ const keywordResearchFlow = ai.defineFlow(
     console.log("Calling Google Keyword Planner Tool with seeds:", input.seedKeywordsList);
     const keywords = await getGoogleKeywordIdeasTool({
       seedKeywords: input.seedKeywordsList,
-      // TODO: Potentially make language and geo target configurable through flow input
     });
     
-    // Ensure the output matches the schema, especially after API mapping
     return keywords.map(kw => KeywordDataSchema.parse(kw));
   }
 );
-
