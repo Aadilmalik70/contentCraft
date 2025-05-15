@@ -96,8 +96,9 @@ export default function KeywordResearchView() {
           onChange={(e) => setPrompt(e.target.value)}
           className="flex-grow"
           onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+          suppressHydrationWarning
         />
-        <Button onClick={handleSearch} disabled={isLoading} className="w-full sm:w-auto">
+        <Button onClick={handleSearch} disabled={isLoading} className="w-full sm:w-auto" suppressHydrationWarning>
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SearchIcon className="mr-2 h-4 w-4" />}
           Search Keywords
         </Button>
@@ -110,6 +111,7 @@ export default function KeywordResearchView() {
           value={filterTerm}
           onChange={handleFilterChange}
           className="max-w-sm"
+          suppressHydrationWarning
         />
       }
 

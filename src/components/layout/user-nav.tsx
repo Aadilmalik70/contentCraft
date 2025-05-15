@@ -19,6 +19,10 @@ import { useSidebar } from '@/components/ui/sidebar';
 
 export default function UserNav() {
   const { state: sidebarState, isMobile } = useSidebar(); // state can be "expanded" or "collapsed"
+  // On the server, isMobile will be undefined. !isMobile will be true.
+  // isCollapsed will be (sidebarState === 'collapsed' && true) which simplifies to (sidebarState === 'collapsed')
+  // This same logic applies for the initial client render before useIsMobile's useEffect runs.
+  // After hydration and useEffect, isMobile becomes true/false, and isCollapsed updates.
   const isCollapsed = sidebarState === 'collapsed' && !isMobile;
 
   return (
@@ -27,6 +31,7 @@ export default function UserNav() {
         <Button
           variant="ghost"
           className={`w-full flex items-center justify-between p-2 h-auto ${isCollapsed ? 'justify-center' : ''}`}
+          suppressHydrationWarning
         >
           <div className="flex items-center gap-2">
             <Avatar className="h-8 w-8">
