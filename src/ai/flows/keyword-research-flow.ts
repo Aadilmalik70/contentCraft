@@ -27,6 +27,8 @@ const KeywordDataSchema = z.object({
   competition: z.number().describe("Competition level (0-1, where 1 is high). Derived from Keyword Planner's competition index."),
   relatedTerms: z.array(z.string()).describe("List of related keyword terms. Note: This will be empty as it's not directly provided per keyword in this manner by Keyword Planner."),
 });
+
+const KeywordResearchOutputSchema = z.array(KeywordDataSchema);
 export type KeywordResearchOutput = z.infer<typeof KeywordResearchOutputSchema>;
 
 
@@ -163,3 +165,4 @@ const keywordResearchFlow = ai.defineFlow(
     return keywords.map(kw => KeywordDataSchema.parse(kw));
   }
 );
+
