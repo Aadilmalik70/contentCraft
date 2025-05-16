@@ -86,7 +86,7 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
         "Failed to initialize Google Ads Customer or KeywordPlanIdeaService. " +
         "This often indicates an issue with the provided Customer IDs (LINKED_CUSTOMER_ID, LOGIN_CUSTOMER_ID), " +
         "the Refresh Token, or API access permissions for the account. " +
-        "Please verify these in your .env file and Google Ads account settings."
+        "Please verify these in your .env file and Google Ads account settings, ensure the refresh token is valid, and that the user account has permissions for the target Ads account."
       );
     }
 
@@ -139,7 +139,18 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
       
       let finalErrorMessage = "Failed to fetch keyword ideas from Google Keyword Planner.";
 
-      if (err.message && err.message.toLowerCase().includes('unauthorized_client')) {
+      const errMessageLower = (err.message || "").toLowerCase();
+      const errDetailsLower = (err.details || "").toLowerCase();
+
+      if (errMessageLower.includes('invalid_grant') || errDetailsLower.includes('invalid_grant')) {
+        finalErrorMessage = "Error: invalid_grant. Your GOOGLE_ADS_REFRESH_TOKEN is invalid, expired, or revoked. Please: " +
+                            "1. Regenerate your GOOGLE_ADS_REFRESH_TOKEN using the correct OAuth2 Client ID & Secret. " +
+                            "2. Ensure the Google account used for regeneration has active access to the target Google Ads account. " +
+                            "3. Verify no recent password changes or security updates on the Google account have invalidated the token. " +
+                            "4. Confirm the Client ID and Secret in your .env file match those used for token generation. " +
+                            "5. Restart your Next.js server and Genkit development process after updating the .env file. " +
+                            "Check server-side console logs for more details from the API.";
+      } else if (errMessageLower.includes('unauthorized_client')) {
         finalErrorMessage = "Error: unauthorized_client. This indicates an issue with your OAuth2 credentials (Client ID, Client Secret, Refresh Token) or API permissions. Please: 1. Verify your Client ID and Client Secret in .env. 2. Regenerate your GOOGLE_ADS_REFRESH_TOKEN using the correct credentials and ensure it's for the correct Google account with Ads access. 3. Confirm the Google Ads API is enabled in your Google Cloud project, and the OAuth consent screen is correctly configured. 4. Ensure the authenticated user has authorized the application and has sufficient permissions for the Google Ads account specified by GOOGLE_ADS_LINKED_CUSTOMER_ID. 5. Check the server-side console logs for more detailed gRPC error messages from the API.";
       } else if (err.errors && err.errors[0] && err.errors[0].error_code) {
         const errorCode = err.errors[0].error_code;
@@ -149,13 +160,11 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
         } else if (errorCode.authorization_error) {
             specificError = `Authorization Error: ${errorCode.authorization_error}`;
         }
-        // Append original gRPC message if no specific code matched but err.errors was present
         finalErrorMessage += ` Details: ${err.errors[0].message}${specificError ? ` (${specificError})` : ''}`;
          if (err.message && !finalErrorMessage.includes(err.message)) {
             finalErrorMessage += ` Original API Message: ${err.message}`;
         }
       } else if (err.message) {
-        // Fallback to the original error message if no specific conditions met
         finalErrorMessage += ` Message: ${err.message}`;
       }
       
