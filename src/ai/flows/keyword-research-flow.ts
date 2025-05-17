@@ -89,7 +89,7 @@ const getGoogleKeywordIdeasTool = ai.defineTool(
         "Please verify these in your .env file and Google Ads account settings, ensure the refresh token is valid, and that the user account has permissions for the target Ads account."
       );
     }
-
+console.log("customer",customer)
     const languageId = '1000'; // English. See: https://developers.google.com/google-ads/api/reference/data/codes-formats#languages
     const geoTargetConstantId = '2840'; // United States. See: https://developers.google.com/google-ads/api/reference/data/geotargets
 
